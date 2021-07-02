@@ -7,6 +7,7 @@ import it.unimi.dsi.fastutil.longs.LongArrayList;
 import it.unimi.dsi.fastutil.longs.LongArraySet;
 import it.unimi.dsi.fastutil.longs.LongComparators;
 import org.elasticsearch.index.query.BoolQueryBuilder;
+import org.elasticsearch.search.sort.FieldSortBuilder;
 import org.elasticsearch.search.sort.SortBuilders;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -79,6 +80,8 @@ public class QueryService implements ApplicationContextAware {
 	private static final Function<Long, Object[]> CONCEPT_ID_SEARCH_AFTER_EXTRACTOR =
 			conceptId -> conceptId == null ? null : SearchAfterHelper.convertToTokenAndBack(new Object[]{conceptId});
 
+	private static Map<String, Page<Long>> refsetMemberCache = new HashMap<>();
+			
 	private final Logger logger = LoggerFactory.getLogger(getClass());
 
 	public Page<ConceptMini> eclSearch(String ecl, boolean stated, String branchPath, PageRequest pageRequest) {
@@ -271,6 +274,18 @@ public class QueryService implements ApplicationContextAware {
 		Collection<Long> conceptIdFilter = null;
 		if (conceptQuery.conceptIds != null && !conceptQuery.conceptIds.isEmpty()) {
 			conceptIdFilter = conceptQuery.conceptIds.stream().map(Long::valueOf).collect(Collectors.toSet());
+		}
+		if(conceptQuery.getRefsetId() != null) {
+			final String refsetMemberQuery = "^ " + conceptQuery.getRefsetId();
+			if(refsetMemberCache.containsKey(refsetMemberQuery + "|" + branchCriteria + "|" + branchPath + "|" + conceptQuery.isStated())) {
+				conceptIdFilter = refsetMemberCache.get(refsetMemberQuery + "|" + branchCriteria + "|" + branchPath + "|" + conceptQuery.isStated()).getContent();
+			}
+			else {
+				Page<Long> refsetConceptIds = eclQueryService.selectConceptIds(refsetMemberQuery, branchCriteria, branchPath, conceptQuery.isStated(), null, null);
+				conceptIdFilter = refsetConceptIds.getContent();
+				refsetMemberCache.put(refsetMemberQuery + "|" + branchCriteria + "|" + branchPath + "|" + conceptQuery.isStated(), refsetConceptIds);
+			}
+
 		}
 		if (definitionStatusFilter != null || module != null) {
 			Page<Long> allConceptIds = eclQueryService.selectConceptIds(ecl, branchCriteria, branchPath, conceptQuery.isStated(), conceptIdFilter, null);
@@ -524,6 +539,7 @@ public class QueryService implements ApplicationContextAware {
 		private String ecl;
 		private Set<String> conceptIds;
 		private final DescriptionCriteria descriptionCriteria;
+		private String refsetId;
 
 		private ConceptQueryBuilder(boolean stated) {
 			this.stated = stated;
@@ -535,7 +551,7 @@ public class QueryService implements ApplicationContextAware {
 		}
 
 		private boolean hasLogicalConditions() {
-			return ecl != null || activeFilter != null || definitionStatusFilter != null || conceptIds != null || module != null;
+			return ecl != null || activeFilter != null || definitionStatusFilter != null || conceptIds != null || module != null || refsetId != null;
 		}
 
 		public ConceptQueryBuilder ecl(String ecl) {
@@ -587,6 +603,11 @@ public class QueryService implements ApplicationContextAware {
 			descriptionCriteriaUpdater.accept(descriptionCriteria);
 			return this;
 		}
+		
+		public ConceptQueryBuilder refsetId(String refsetId) {
+			this.refsetId = refsetId;
+			return this;
+		}		
 
 		ConceptQueryBuilder descriptionTerm(String term) {
 			descriptionCriteria.term(term);
@@ -624,6 +645,10 @@ public class QueryService implements ApplicationContextAware {
 		public DescriptionCriteria getDescriptionCriteria() {
 			return descriptionCriteria;
 		}
+		
+		private String getRefsetId() {
+			return refsetId;
+		}		
 	}
 
 }
