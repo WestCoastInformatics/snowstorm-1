@@ -8,8 +8,10 @@ import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiParam;
 import org.apache.commons.lang3.SerializationUtils;
+import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.util.set.Sets;
 import org.snomed.snowstorm.config.Config;
+import org.snomed.snowstorm.core.data.domain.Concept;
 import org.snomed.snowstorm.core.data.domain.ConceptMini;
 import org.snomed.snowstorm.core.data.domain.Description;
 import org.snomed.snowstorm.core.data.domain.ReferenceSetMember;
@@ -21,11 +23,13 @@ import org.snomed.snowstorm.core.data.services.identifier.IdentifierService;
 import org.snomed.snowstorm.core.data.services.pojo.*;
 import org.snomed.snowstorm.core.pojo.LanguageDialect;
 import org.snomed.snowstorm.core.util.TimerUtil;
+import org.snomed.snowstorm.rest.converter.SearchAfterHelper;
 import org.snomed.snowstorm.rest.pojo.ItemsPage;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.elasticsearch.core.SearchAfterPageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -75,7 +79,7 @@ public class ReferenceSetMemberController {
 
 		branch = BranchPathUriUtil.decodePath(branch);
 		List<LanguageDialect> languageDialects = ControllerHelper.parseAcceptLanguageHeaderWithDefaultFallback(acceptLanguageHeader);
-		PageRequest pageRequest = ControllerHelper.getPageRequest(offset, limit, SORT_BY_MEMBER_ID_DESC);
+		PageRequest pageRequest = ControllerHelper.getPageRequest(offset, limit, SORT_BY_MEMBER_ID_DESC, searchAfter);
 
 		TimerUtil timer = new TimerUtil("Member aggregation debug " + branch);
 		// Find Reference Sets with aggregation
@@ -329,5 +333,16 @@ public class ReferenceSetMemberController {
 		public void setMemberIds(Set<String> memberIds) {
 			this.memberIds = memberIds;
 		}
+	}
+	
+	private PageRequest getPageRequestWithSort(int offset, int size, String searchAfter, Sort sort) {
+		ControllerHelper.validatePageSize(offset, size);
+		PageRequest pageRequest;
+		if (!Strings.isNullOrEmpty(searchAfter)) {
+			pageRequest = SearchAfterPageRequest.of(SearchAfterHelper.fromSearchAfterToken(searchAfter), size, sort);
+		} else {
+			pageRequest = ControllerHelper.getPageRequest(offset, size, sort);
+		}
+		return pageRequest;
 	}
 }
