@@ -72,9 +72,14 @@ public class MultiSearchService implements CommitListener {
 
 		if (ecl != null) {
 			// ECL -> conceptIds
-			BranchCriteria branchCriteria = versionControlHelper.getBranchCriteria("MAIN");
-			//MultiBranchCriteria branchesQuery = getBranchesQuery();
-			Page<Long> page = eclQueryService.selectConceptIds(ecl, branchCriteria, true, null, null);
+			Set<Long> conceptIds = new HashSet<>();
+			MultiBranchCriteria branchesQuery = getBranchesQuery();
+			for(BranchCriteria branchCriteria : branchesQuery.getBranchCriteria()) {
+				Page<Long> page = eclQueryService.selectConceptIds(ecl, branchCriteria, true, null, null);
+				conceptIds.addAll(page.toSet());
+			}
+			final Page<Long> page = new PageImpl<>(new ArrayList<Long>(conceptIds));
+			
 			criteria.conceptIds(page.getContent());
 		}
 
